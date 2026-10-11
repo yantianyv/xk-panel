@@ -1,0 +1,27 @@
+#!/bin/bash
+# 兮克面板驱动 · 命令行工具
+APP="xk-panel"
+BASE="/var/apps/${APP}"
+
+case "$1" in
+    status)
+        ${BASE}/cmd/main status
+        ;;
+    start)
+        ${BASE}/cmd/main start
+        ;;
+    stop)
+        ${BASE}/cmd/main stop
+        ;;
+    log)
+        ${BASE}/cmd/main log "${2:-100}"
+        ;;
+    url)
+        IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+        echo "http://${IP:-<NAS 地址>}:47001/"
+        ;;
+    *)
+        echo "用法: xk-panel {status|start|stop|log [行数]|url}"
+        exit 1
+        ;;
+esac

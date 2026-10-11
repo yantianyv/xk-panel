@@ -1,0 +1,10 @@
+# 打包产物
+*.fpk
+.build_tmp/
+
+# 临时与缓存
+__pycache__/
+*.pyc
+*.tmp
+.DS_Store
+Thumbs.db

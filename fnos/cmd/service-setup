@@ -1,0 +1,24 @@
+#!/bin/bash
+# xk-panel 生命周期脚本：面板驱动守护进程
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
+
+APP_DIR="${TRIM_APPDEST}"
+SERVICE_COMMAND="python3 ${APP_DIR}/app/xk_panel.py"
+SVC_BACKGROUND=y
+SVC_WRITE_PID=y
+SVC_QUIET=y
+SVC_CWD="${TRIM_PKGVAR}"
+
+# 开机前：debugfs 提供引脚名到线号的映射表（读不到时程序用内置实测表兜底）
+service_prestart() {
+    mountpoint -q /sys/kernel/debug 2>/dev/null || mount -t debugfs none /sys/kernel/debug 2>/dev/null || true
+}
+
+service_postinst() {
+    install_log "xk-panel: 安装完成，启动面板驱动"
+    daemon_status || start_daemon
+}
+
+service_postuninst() {
+    install_log "xk-panel: 已卸载"
+}

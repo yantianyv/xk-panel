@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>兮克面板驱动 · 设置</title>
+<style>
+  :root { --bg:#0f1218; --card:#171b23; --line:#252b36; --fg:#e6eaf2; --dim:#8d97a8; --acc:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex;
+           align-items:center; gap:10px; position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#22c55e; box-shadow:0 0 8px #22c55e; }
+  main { padding:16px 20px 80px; max-width:980px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:16px; margin-bottom:14px; }
+  .card > h2 { font-size:14px; margin:0 0 12px; color:#cbd5e1; font-weight:600;
+               display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .card > h2 .tag { color:var(--dim); font-size:12px; font-weight:400; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+  .stat { background:#12161d; border:1px solid var(--line); border-radius:9px; padding:10px 12px; }
+  .stat .k { color:var(--dim); font-size:12px; }
+  .stat .v { font-size:17px; font-weight:600; margin-top:2px; }
+  label { display:block; color:var(--dim); font-size:12px; margin-bottom:4px; }
+  input[type=number], input[type=time], select {
+    width:100%; background:#12161d; color:var(--fg); border:1px solid var(--line);
+    border-radius:8px; padding:7px 9px; font-size:13px; }
+  input[type=color] { width:100%; height:34px; background:#12161d; border:1px solid var(--line);
+                      border-radius:8px; padding:2px; }
+  input[type=range] { width:100%; }
+  .switch { display:flex; align-items:center; gap:8px; margin:7px 0; color:var(--fg); font-size:13px; }
+  .switch input { width:auto; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px;
+           padding:8px 14px; font-size:13px; cursor:pointer; }
+  button.ghost { background:#222835; color:var(--fg); }
+  button.warn { background:#b45309; }
+  button:active { transform:translateY(1px); }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:#12161dcc; backdrop-filter:blur(6px);
+         border-top:1px solid var(--line); padding:10px 20px; display:flex; gap:10px;
+         justify-content:flex-end; }
+  .toast { position:fixed; bottom:70px; left:50%; transform:translateX(-50%);
+           background:#22c55e; color:#06210f; padding:8px 16px; border-radius:20px;
+           font-size:13px; opacity:0; transition:.25s; pointer-events:none; }
+  .toast.on { opacity:1; }
+  .hint { color:var(--dim); font-size:12px; margin-top:6px; }
+  details { border-top:1px solid var(--line); padding-top:12px; margin-top:12px; }
+  details:first-of-type { border-top:0; padding-top:0; margin-top:0; }
+  summary { cursor:pointer; color:#cbd5e1; font-size:14px; font-weight:600; margin-bottom:10px; }
+  .inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header><div class="dot"></div><h1>兮克面板驱动</h1>
+  <span id="probe_state" style="color:var(--dim);font-size:12px"></span></header>
+
+<main>
+  <div class="card">
+    <h2>运行状态 <button class="ghost" onclick="refresh()">刷新</button></h2>
+    <div class="grid" id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>电源键灯 <span class="tag">整机健康度</span></h2>
+    <div class="grid">
+      <div>
+        <label>颜色</label>
+        <select id="power_led">
+          <option value="gradient">按健康度渐变（推荐）</option>
+          <option value="fixed">固定颜色</option>
+          <option value="off">关闭</option>
+        </select>
+      </div>
+      <div><label>固定颜色</label><input type="color" id="power_fixed_color"></div>
+      <div>
+        <label>灯效</label>
+        <select id="power_effect">
+          <option value="solid">常亮</option>
+          <option value="breath">呼吸</option>
+          <option value="rainbow">彩虹</option>
+        </select>
+      </div>
+      <div>
+        <label>灯效周期：<b id="power_effect_speed_v"></b> 秒</label>
+        <input type="range" id="power_effect_speed" min="5" max="120">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>状态灯 <span class="tag">存储健康度</span></h2>
+    <div class="grid">
+      <div>
+        <label>显示内容</label>
+        <select id="store_led">
+          <option value="capacity">剩余容量</option>
+          <option value="array">阵列状态</option>
+          <option value="off">关闭</option>
+        </select>
+      </div>
+      <div><label>监控的存储</label><select id="storage_target"></select></div>
+      <div>
+        <label>灯效</label>
+        <select id="store_effect">
+          <option value="solid">常亮</option>
+          <option value="breath">呼吸</option>
+          <option value="rainbow">彩虹</option>
+        </select>
+      </div>
+      <div>
+        <label>灯效周期：<b id="store_effect_speed_v"></b> 秒</label>
+        <input type="range" id="store_effect_speed" min="5" max="120">
+      </div>
+      <div><label>可用高于此比例显示绿色（%）</label><input type="number" id="cap_green_free" min="1" max="99"></div>
+      <div><label>可用低于此比例显示红色（%）</label><input type="number" id="cap_red_free" min="0" max="98"></div>
+    </div>
+    <label class="switch" style="margin-top:10px"><input type="checkbox" id="fault_blink">
+      硬盘故障或阵列重建时闪红告警</label>
+  </div>
+
+  <div class="card">
+    <h2>其他指示灯</h2>
+    <div class="grid">
+      <div>
+        <label>整组亮度：<b id="brightness_v"></b>%</label>
+        <input type="range" id="brightness" min="5" max="100">
+      </div>
+      <div>
+        <label class="switch"><input type="checkbox" id="disk_led"> 盘位指示灯</label>
+        <label class="switch"><input type="checkbox" id="usb_led"> USB 指示灯</label>
+        <label class="switch"><input type="checkbox" id="lan_led"> 网口指示灯</label>
+      </div>
+      <div>
+        <label class="switch"><input type="checkbox" id="disk_activity"> 硬盘读写呼吸提示（速度越快越急）</label>
+        <label class="switch"><input type="checkbox" id="lan_activity"> 网络流量呼吸提示（速度越快越急）</label>
+        <label class="switch"><input type="checkbox" id="boot_effect"> 开机时灯效自检</label>
+      </div>
+      <div>
+        <label>盘位灯流动效果</label>
+        <select id="disk_marquee">
+          <option value="off">关闭</option>
+          <option value="boot">仅开机自检</option>
+          <option value="rebuild">阵列重建时</option>
+          <option value="always">常驻</option>
+        </select>
+      </div>
+      <div>
+        <label>流动周期：<b id="marquee_period_v"></b> 秒</label>
+        <input type="range" id="marquee_period" min="4" max="40">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>夜间免打扰</h2>
+    <div class="grid">
+      <div><label class="switch"><input type="checkbox" id="night_enabled"> 启用</label></div>
+      <div><label>开始</label><input type="time" id="night_start"></div>
+      <div><label>结束</label><input type="time" id="night_end"></div>
+      <div>
+        <label>指示灯</label>
+        <select id="night_leds">
+          <option value="dim">调暗</option><option value="off">熄灭</option><option value="keep">不变</option>
+        </select>
+      </div>
+      <div>
+        <label>夜间灯效</label>
+        <select id="night_effect">
+          <option value="solid">常亮（推荐）</option>
+          <option value="breath">呼吸</option>
+          <option value="rainbow">彩虹</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>屏幕</h2>
+    <div class="grid">
+      <div><label class="switch"><input type="checkbox" id="lcd_enabled"> 显示运行信息</label></div>
+      <div><label>刷新间隔（秒）</label><input type="number" id="lcd_interval" min="1" max="30"></div>
+      <div>
+        <label class="switch"><input type="checkbox" id="lcd_temp"> 温度</label>
+        <label class="switch"><input type="checkbox" id="lcd_storage"> 容量</label>
+        <label class="switch"><input type="checkbox" id="lcd_network"> 网络</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>高级</h2>
+
+    <details>
+      <summary>风扇</summary>
+      <div class="grid">
+        <div><label class="switch"><input type="checkbox" id="fan_enabled"> 接管风扇调速</label></div>
+        <div>
+          <label>策略</label>
+          <select id="fan_preset">
+            <option value="quiet">静音</option><option value="standard">标准</option>
+            <option value="performance">性能</option>
+          </select>
+        </div>
+        <div><label>最低转速（%）</label><input type="number" id="fan_min_duty"></div>
+      </div>
+      <div class="hint">接管后由本程序按温度调速；如出现转速异常可交还 BIOS 控制。</div>
+      <div class="inline" style="margin-top:8px">
+        <button class="ghost warn" onclick="post('/api/fan_restore',{}).then(()=>toast('已交还 BIOS 控制'))">
+          交还 BIOS 风扇控制</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>健康评分</summary>
+      <div class="hint" style="margin-bottom:10px">
+        健康分 = 温度分<sup>w</sup> × 性能分<sup>1-w</sup>，温度取 CPU 与硬盘中最热的一个。
+      </div>
+      <div class="grid">
+        <div><label>CPU 温度偏高阈值（℃）</label><input type="number" id="cpu_temp_green"></div>
+        <div><label>CPU 温度告警阈值（℃）</label><input type="number" id="cpu_temp_red"></div>
+        <div><label>硬盘温度偏高阈值（℃）</label><input type="number" id="hdd_temp_green"></div>
+        <div><label>硬盘温度告警阈值（℃）</label><input type="number" id="hdd_temp_red"></div>
+        <div>
+          <label>温度权重：<b id="w_temp_v"></b></label>
+          <input type="range" id="w_temp" min="10" max="95">
+        </div>
+        <div>
+          <label>变化平滑度：<b id="smooth_v"></b></label>
+          <input type="range" id="smooth" min="2" max="60">
+        </div>
+        <div><label>CPU 占用权重</label><input type="number" step="0.05" id="w_cpu"></div>
+        <div><label>GPU 占用权重</label><input type="number" step="0.05" id="w_gpu"></div>
+        <div><label>内存权重</label><input type="number" step="0.05" id="w_mem"></div>
+        <div><label>可用内存充足线（%）</label><input type="number" id="mem_ok_ratio_pct"></div>
+        <div><label>温度过高时限分</label><input type="number" step="0.05" id="throttle_cap"></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>灯位与引脚（换机 / 接线不同时调整）</summary>
+      <div class="inline" style="margin-bottom:8px">
+        <button class="ghost" onclick="probe('leds')">逐脚探测</button>
+        <button class="ghost" onclick="post('/api/probe_stop',{})">停止</button>
+        <span class="hint">每脚 <input type="number" id="probe_seconds" step="0.5" min="0.5" max="10"
+          style="width:60px;display:inline-block"> 秒</span>
+      </div>
+      <div class="grid" id="pinmap" style="margin-top:10px"></div>
+      <div class="inline" style="margin-top:10px">
+        <button class="ghost" onclick="savePinMap()">保存映射</button>
+        <button class="ghost" onclick="resetPinMap()">恢复默认</button>
+      </div>
+      <div class="hint" id="diag" style="margin-top:12px"></div>
+    </details>
+  </div>
+</main>
+
+<div class="bar">
+  <button class="ghost" onclick="resetDefaults()">恢复默认</button>
+  <button onclick="save()">保存设置</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const NUM = ['cap_green_free','cap_red_free','cpu_temp_green','cpu_temp_red','hdd_temp_green',
+  'hdd_temp_red','w_cpu','w_gpu','w_mem','throttle_cap','fan_min_duty',
+  'lcd_interval','brightness','probe_seconds'];
+const BOOL = ['fault_blink','disk_led','usb_led','lan_led','night_enabled','lcd_enabled',
+  'lcd_temp','lcd_storage','lcd_network','fan_enabled','disk_activity','lan_activity','boot_effect'];
+const STR = ['power_led','store_led','power_effect','store_effect','storage_target',
+  'power_fixed_color','night_start','night_end','night_leds','night_effect','fan_preset','disk_marquee'];
+const SRANGE = ['power_effect_speed','store_effect_speed','marquee_period'];
+let S = {}, PADS = {led_candidates:[], all_pins:[], roles:[], current:{}}, PM = {};
+
+async function api(p, o) { const r = await fetch(p, o); return r.json(); }
+async function post(p, b) {
+  const r = await api(p, {method:'POST', headers:{'Content-Type':'application/json'},
+                          body:JSON.stringify(b||{})});
+  toast(r.ok ? '已发送' : (r.error||'失败'));
+  return r;
+}
+function toast(m) {
+  const t = document.getElementById('toast');
+  t.textContent = m; t.classList.add('on');
+  setTimeout(()=>t.classList.remove('on'), 1600);
+}
+function fill() {
+  for (const k of NUM) document.getElementById(k).value = S[k];
+  for (const k of BOOL) document.getElementById(k).checked = !!S[k];
+  for (const k of STR) { const el = document.getElementById(k); if (el) el.value = S[k] ?? ''; }
+  for (const k of SRANGE) {
+    const v = S[k] ?? 3;
+    document.getElementById(k).value = Math.round(v * 10);
+    document.getElementById(k + '_v').textContent = v.toFixed(1);
+  }
+  document.getElementById('mem_ok_ratio_pct').value = Math.round((S.mem_ok_ratio||0.25)*100);
+  document.getElementById('w_temp').value = Math.round((S.w_temp||0.6)*100);
+  document.getElementById('w_temp_v').textContent = (S.w_temp||0.6).toFixed(2);
+  document.getElementById('smooth').value = Math.round((S.smooth||0.15)*100);
+  document.getElementById('smooth_v').textContent = (S.smooth||0.15).toFixed(2);
+  document.getElementById('brightness_v').textContent = S.brightness;
+}
+function collect() {
+  const o = {};
+  for (const k of NUM) o[k] = Number(document.getElementById(k).value);
+  for (const k of BOOL) o[k] = document.getElementById(k).checked;
+  for (const k of STR) { const el = document.getElementById(k); if (el) o[k] = el.value; }
+  for (const k of SRANGE) o[k] = Number(document.getElementById(k).value)/10;
+  o.mem_ok_ratio = Number(document.getElementById('mem_ok_ratio_pct').value)/100;
+  o.w_temp = Number(document.getElementById('w_temp').value)/100;
+  o.smooth = Number(document.getElementById('smooth').value)/100;
+  return o;
+}
+async function save() { S = (await post('/api/settings', collect())).settings || S; fill(); }
+async function resetDefaults() {
+  if (!confirm('恢复默认设置？')) return;
+  S = (await post('/api/defaults', {})).settings || S; fill();
+}
+async function loadStorage() {
+  const d = await api('/api/storage');
+  const sel = document.getElementById('storage_target');
+  sel.innerHTML = '';
+  for (const v of d.volumes) {
+    const o = document.createElement('option');
+    o.value = v.name;
+    o.textContent = v.name === 'all' ? '全部合计' : `${v.name}（可用 ${v.free_pct}%）`;
+    sel.appendChild(o);
+  }
+  sel.value = S.storage_target || 'all';
+}
+function colorCss(c) { return Array.isArray(c) ? `rgb(${c.map(x=>Math.round(x*255)).join(',')})` : '#333'; }
+async function loadPads() {
+  PADS = await api('/api/pads');
+  PM = Object.assign({}, PADS.defaults, PADS.current || {});
+  renderPinMap();
+}
+function padOptions(sel) {
+  const ledSet = new Set(PADS.led_candidates.map(x=>x.pad));
+  const mk = (x) => `<option value="${x.pad}" ${x.pad===sel?'selected':''}>${x.pad}（线${x.line}）</option>`;
+  const leds = PADS.led_candidates.map(mk).join('');
+  const others = PADS.all_pins.filter(x=>!ledSet.has(x.pad)).map(mk).join('');
+  return `<optgroup label="LED 候选">${leds}</optgroup>
+          <optgroup label="其他引脚（谨慎）">${others}</optgroup>`;
+}
+function renderPinMap() {
+  document.getElementById('pinmap').innerHTML = PADS.roles.map(([role, label]) => `
+    <div>
+      <label>${label}</label>
+      <select id="pm_${role}" onchange="PM['${role}']=this.value">${padOptions(PM[role])}</select>
+      <button class="ghost" style="margin-top:6px;width:100%"
+        onclick="post('/api/test',{target:'pin:'+PM['${role}'],color:'#ffffff',seconds:3})">测试</button>
+    </div>`).join('');
+}
+async function savePinMap() {
+  const r = await post('/api/pin_map', {pin_map: PM});
+  PM = Object.assign({}, PADS.defaults, r.pin_map || {}); renderPinMap();
+}
+async function resetPinMap() {
+  if (!confirm('恢复默认灯位映射？')) return;
+  const r = await post('/api/pin_map_reset', {});
+  PM = Object.assign({}, PADS.defaults, r.pin_map || {}); renderPinMap();
+}
+async function probe(scope) {
+  const sec = Number(document.getElementById('probe_seconds').value) || 2.5;
+  const r = await post('/api/probe', {scope, seconds: sec});
+  if (r.ok) toast(`开始探测 ${r.count} 个灯位`);
+}
+async function refresh() {
+  const d = await api('/api/status');
+  const rows = [
+    ['CPU 温度', (d.cpu ?? '-') + ' ℃'],
+    ['硬盘最高温', (d.hdd_max ?? '-') + ' ℃'],
+    ['健康分', (d.health ?? 0).toFixed(2)],
+    ['CPU / GPU 占用', `${Math.round((d.cpu_util??0)*100)}% / ${Math.round((d.gpu_busy??0)*100)}%`],
+    ['内存可用', Math.round((d.mem_ratio??0)*100) + '%'],
+    ['存储', `${d.total_gb ?? 0} GB / 可用 ${d.free_pct ?? 0}%`],
+    ['风扇', d.fan_enabled ? (d.fan_duty ?? '-') : '未接管'],
+    ['夜间模式', d.night ? '是' : '否'],
+  ];
+  document.getElementById('status').innerHTML = rows.map(([k,v]) =>
+      `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')
+    + `<div class="stat"><div class="k">电源键灯</div><div class="v">
+         <span style="display:inline-block;width:34px;height:14px;border-radius:4px;
+         background:${colorCss(d.power_color)}"></span></div></div>
+       <div class="stat"><div class="k">状态灯</div><div class="v">
+         <span style="display:inline-block;width:34px;height:14px;border-radius:4px;
+         background:${colorCss(d.store_color)}"></span></div></div>`;
+  document.getElementById('probe_state').textContent =
+    d.probe ? `灯位探测中：${d.probe.pad}（${d.probe.index}/${d.probe.total}）` : '';
+  document.getElementById('diag').textContent =
+    `屏幕 HID: ${d.hid ? '已连接' : '未找到'} ｜ 硬件监控: ${d.ec_available ? '可用' : '不可用'} ｜ 磁盘: ` +
+    (d.disks||[]).map((x,i)=>`${i+1}:${x.fault?'故障':(x.present?'在位':'无')}`).join(' ');
+}
+(async function init(){
+  const d = await api('/api/settings'); S = d.settings;
+  fill(); await loadStorage(); await loadPads(); await refresh();
+  const bind = (id, vid, f) => {
+    document.getElementById(id).oninput = e => { document.getElementById(vid).textContent = f(e.target.value); };
+  };
+  bind('w_temp','w_temp_v', v=>(v/100).toFixed(2));
+  bind('smooth','smooth_v', v=>(v/100).toFixed(2));
+  bind('brightness','brightness_v', v=>v);
+  bind('power_effect_speed','power_effect_speed_v', v=>(v/10).toFixed(1));
+  bind('store_effect_speed','store_effect_speed_v', v=>(v/10).toFixed(1));
+  bind('marquee_period','marquee_period_v', v=>(v/10).toFixed(1));
+  setInterval(refresh, 3000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "xk-panel.Application": {
+            "title": "兮克面板驱动",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "protocol": "http",
+            "port": 47001,
+            "url": "/",
+            "allUsers": true
+        }
+    }
+}

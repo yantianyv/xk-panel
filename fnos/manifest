@@ -1,0 +1,16 @@
+appname         = xk-panel
+version         = 1.0.0
+display_name    = 兮克面板驱动
+desc            = <b>兮克面板驱动</b> 让装了飞牛 fnOS 的兮克 XikeStor NAS 前面板恢复完整功能，并提供可视化设置页。<br><br><b>屏幕：</b><br>- 显示 CPU / 系统 / 硬盘温度、存储容量、网口 IP 与掩码网关<br>- 刷新间隔、显示项均可配置；屏幕上的关机 / 重启 / 弹出设备操作直接生效<br><br><b>指示灯：</b><br>- 电源键灯与状态灯均为三原色，支持无极渐变：电源键灯表示整机健康分（温度分 × 性能分，含 CPU / GPU / 内存占用），状态灯表示所选存储的剩余容量健康度<br>- 硬盘位绿灯（在位）、红灯（故障）；USB、网口指示灯按实际状态自动亮灭<br>- 硬盘故障或阵列重建时状态灯闪烁告警<br><br><b>设置页：</b>http://&lt;NAS 地址&gt;:47001<br>- 灯光校准：支持逐脚探测（默认仅遍历 LED 引脚，另有全部引脚的高级模式并附风险提示）与功能引脚重映射，换机或接线不同都不用改代码<br>- 健康评分参数（温度阈值、性能权重、平滑系数）、亮度、夜间免打扰时段、屏幕刷新项<br><br><b>说明：</b>后台服务，应用中心显示运行中。原厂驱动会造成约 50% CPU 占用，本实现无此问题。面板 LCD 背光亮度由屏幕硬件决定，不受主机控制。<br><br><b>适配机型：</b>兮克 XikeStor TS3004E（4 盘位，IT8613E + Holtek USB-HID 面板）。其他机型可在设置页重新映射引脚。
+platform        = x86
+source          = thirdparty
+maintainer      = yantianyv
+maintainer_url  =
+distributor     = yantianyv
+distributor_url =
+desktop_uidir   = ui
+desktop_applaunchname = xk-panel.Application
+service_port    = 47001
+checkport       = true
+os_min_version  = 0.9.0
+checksum        =
