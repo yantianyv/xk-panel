@@ -8,3 +8,6 @@ __pycache__/
 *.tmp
 .DS_Store
 Thumbs.db
+
+# pi 会话数据
+.pi/
