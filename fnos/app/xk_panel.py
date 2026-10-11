@@ -709,15 +709,25 @@ def hdd_temps():
     return temps[:4]
 
 
-def storage_usage(target='all'):
-    """(总容量GB, 已用GB, 可用GB)；target=all 时统计所有数据卷，否则只看指定卷"""
-    vols = []
+def data_volumes():
+    """数据卷列表：同一设备只保留一个挂载名（优先短名，如 vol1 优先于 vol00）"""
+    seen = {}
     for vol in sorted(os.listdir('/')):
         if not re.fullmatch(r'vol\d+', vol):
             continue
-        if target and target != 'all' and target != vol:
+        try:
+            dev = os.stat(f'/{vol}').st_dev
+        except OSError:
             continue
-        vols.append(vol)
+        cur = seen.get(dev)
+        if cur is None or len(vol) < len(cur):
+            seen[dev] = vol
+    return sorted(seen.values())
+
+
+def storage_usage(target='all'):
+    """(总容量GB, 已用GB, 可用GB)；target=all 时统计所有数据卷，否则只看指定卷"""
+    vols = [v for v in data_volumes() if not target or target == 'all' or target == v]
     total = used = free = 0
     for vol in vols:
         try:
@@ -734,9 +744,7 @@ def storage_usage(target='all'):
 def list_storage():
     """所有数据卷及容量，供设置页选择"""
     out = []
-    for vol in sorted(os.listdir('/')):
-        if not re.fullmatch(r'vol\d+', vol):
-            continue
+    for vol in data_volumes():
         try:
             st = os.statvfs(f'/{vol}')
         except OSError:

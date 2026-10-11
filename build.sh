@@ -26,6 +26,12 @@ VERSION=$(grep "^version" "$FNOS_DIR/manifest" | awk -F'=' '{print $2}' | tr -d 
 PLATFORM=$(grep "^platform" "$FNOS_DIR/manifest" | awk -F'=' '{print $2}' | tr -d ' ')
 [ -z "$APPNAME" ] && error "manifest 中缺少 appname"
 [ -z "$VERSION" ] && error "manifest 中缺少 version"
+# 测试包：manifest 只存基准版本，test 参数自动追加构建号（git commit 数 + 时间戳）
+if [ "${1:-}" = "test" ]; then
+  BUILD_NUM=$(git -C "$SCRIPT_DIR" rev-list --count HEAD 2>/dev/null || echo 1)
+  [ -z "$BUILD_NUM" ] && BUILD_NUM=1
+  VERSION="${VERSION}.${BUILD_NUM}.$(date +%m%d%H%M)"
+fi
 info "应用: $APPNAME  版本: $VERSION  平台: ${PLATFORM:-x86}"
 
 # 2. Create app.tgz
@@ -151,7 +157,7 @@ cp "$FNOS_DIR"/ICON*.PNG "$PKG_DIR/" 2>/dev/null || true
 cp -a "$FNOS_DIR/ui" "$PKG_DIR/"
 [ -d "$PKG_DIR/ui/images" ] && [ -f "$PKG_DIR/ICON_256.PNG" ] && cp "$PKG_DIR/ICON_256.PNG" "$PKG_DIR/ui/images/256.png"
 cp "$FNOS_DIR/manifest" "$PKG_DIR/manifest"
-sed -i.tmp "s/^checksum.*/checksum        = ${CHECKSUM}/" "$PKG_DIR/manifest"
+sed -i.tmp "s/^version.*/version         = ${VERSION}/; s/^checksum.*/checksum        = ${CHECKSUM}/" "$PKG_DIR/manifest"
 rm -f "$PKG_DIR/manifest.tmp" 2>/dev/null || true
 
 # 4. Package

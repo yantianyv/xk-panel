@@ -9,6 +9,7 @@
 | 命令 | 用途 | 出处 |
 |---|---|---|
 | `bash build.sh` | 校验并打包生成 `xk-panel_<版本>_x86.fpk`（版本取自 `fnos/manifest`） | build.sh |
+| `bash build.sh test` | 打测试包：版本自动追加构建号（见下方版本号纪律） | build.sh |
 | `python3 gen_icon.py` | 重新生成应用图标 | gen_icon.py |
 | `xk-panel status\|start\|stop\|log [N]\|url` | NAS 上安装后的运行管理 CLI | fnos/bin/xk-panel |
 
@@ -34,7 +35,7 @@
 - **风扇控制是危险路径**：直写 EC 寄存器会接管 BIOS 智能风扇，改动 `Ec` 类或 `apply_fan` 前先读 `docs/hardware.md`；必须保留「交还 BIOS 控制」的退路。
 - LCD 背光亮度不可由主机控制（硬件限制，见 docs/protocol.md），不要尝试实现。
 - 改硬件协议、引脚、EC 语义时同步更新 `docs/` 对应文档——代码默认值与文档不一致是历史 bug 来源。
-- 发版时同步更新 `fnos/manifest` 的 version 与 `CHANGELOG.md`；version 只在发版时改，开发过程中的提交不动版本号。
+- **版本号纪律**：`fnos/manifest` 的 version 只写**基准版本**（如 `1.0.0`），仅在发版时向前推进并同步 `CHANGELOG.md`。开发测试用 `bash build.sh test`，自动追加构建号（git commit 数 + 时间戳，如 `1.0.0.12.10122215`），保证每次打包版本号都递增，规避同版本不能覆盖安装的问题；测试包的多段号小于任何推进后的基准版本，因此正式版能自然覆盖测试版。（fnOS 的版本比较算法**待确认**，若实测不认 4 段号，再调整后缀格式）
 - git 提交信息风格：中文，`feat: ...` 前缀。
 
 ## 关于 AGENTS.md 自身

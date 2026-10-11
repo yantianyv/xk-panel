@@ -49,6 +49,19 @@
   details:first-of-type { border-top:0; padding-top:0; margin-top:0; }
   summary { cursor:pointer; color:#cbd5e1; font-size:14px; font-weight:600; margin-bottom:10px; }
   .inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #status { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+  .stepper { display:none; gap:8px; }
+  .stepper button { flex:1; height:38px; font-size:18px; padding:0; }
+  @media (pointer: coarse) {
+    input[type=range] { display:none; }        /* 触屏用步进按钮，避免滑动误触 */
+    .stepper { display:flex; }
+    input[type=number], input[type=time], select { font-size:16px; }  /* 防 iOS 聚焦缩放 */
+  }
+  @media (max-width: 640px) {
+    main { padding:12px 12px 84px; }
+    .bar { padding:10px 12px; }
+    .bar button { flex:1; padding:10px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -172,6 +185,7 @@
           <option value="rainbow">彩虹</option>
         </select>
       </div>
+      <div><label>风扇转速上限（%）</label><input type="number" id="night_fan_max" min="10" max="100"></div>
     </div>
   </div>
 
@@ -264,7 +278,7 @@
 
 <script>
 const NUM = ['cap_green_free','cap_red_free','cpu_temp_green','cpu_temp_red','hdd_temp_green',
-  'hdd_temp_red','w_cpu','w_gpu','w_mem','throttle_cap','fan_min_duty',
+  'hdd_temp_red','w_cpu','w_gpu','w_mem','throttle_cap','fan_min_duty','night_fan_max',
   'lcd_interval','brightness','probe_seconds'];
 const BOOL = ['fault_blink','disk_led','usb_led','lan_led','night_enabled','lcd_enabled',
   'lcd_temp','lcd_storage','lcd_network','fan_enabled','disk_activity','lan_activity','boot_effect'];
@@ -324,12 +338,20 @@ async function loadStorage() {
   for (const v of d.volumes) {
     const o = document.createElement('option');
     o.value = v.name;
-    o.textContent = v.name === 'all' ? '全部合计' : `${v.name}（可用 ${v.free_pct}%）`;
+    o.textContent = v.name === 'all' ? '全部合计' : `${v.name}（可用 ${fmtGB(v.free_gb)}，${v.free_pct}%）`;
     sel.appendChild(o);
   }
   sel.value = S.storage_target || 'all';
 }
 function colorCss(c) { return Array.isArray(c) ? `rgb(${c.map(x=>Math.round(x*255)).join(',')})` : '#333'; }
+const fmtGB = v => v == null ? '-' :
+  (v > 999 ? (v/1024).toFixed(2).replace(/\.?0+$/, '') + ' TB' : v + ' GB');
+const fmtPair = (a, b) => {           // “可用 / 总量”共用一个单位，避免折行
+  if (a == null || b == null) return '-';
+  const tb = b > 999;
+  const f = v => tb ? (v/1024).toFixed(2).replace(/\.?0+$/, '') : String(v);
+  return `${f(a)} / ${f(b)}${tb ? ' TB' : ' GB'}`;
+};
 async function loadPads() {
   PADS = await api('/api/pads');
   PM = Object.assign({}, PADS.defaults, PADS.current || {});
@@ -403,7 +425,7 @@ async function refresh() {
     ['健康分', (d.health ?? 0).toFixed(2)],
     ['CPU / GPU 占用', `${Math.round((d.cpu_util??0)*100)}% / ${Math.round((d.gpu_busy??0)*100)}%`],
     ['内存可用', Math.round((d.mem_ratio??0)*100) + '%'],
-    ['存储', `${d.total_gb ?? 0} GB / 可用 ${d.free_pct ?? 0}%`],
+    [`存储 · 可用 ${d.free_pct ?? 0}%`, fmtPair(d.free_gb, d.total_gb)],
     ['风扇', d.fan_enabled ? (d.fan_duty ?? '-') : '未接管'],
     ['夜间模式', d.night ? '是' : '否'],
   ];
@@ -421,6 +443,29 @@ async function refresh() {
     `屏幕 HID: ${d.hid ? '已连接' : '未找到'} ｜ 硬件监控: ${d.ec_available ? '可用' : '不可用'} ｜ 磁盘: ` +
     (d.disks||[]).map((x,i)=>`${i+1}:${x.fault?'故障':(x.present?'在位':'无')}`).join(' ');
 }
+const SLIDERS = {
+  power_effect_speed: {min:5,  max:120, step:5},
+  store_effect_speed: {min:5,  max:120, step:5},
+  marquee_period:     {min:4,  max:40,  step:2},
+  brightness:         {min:5,  max:100, step:5},
+  w_temp:             {min:10, max:95,  step:5},
+  smooth:             {min:2,  max:60,  step:2},
+};
+function buildSteppers() {
+  for (const [id, cfg] of Object.entries(SLIDERS)) {
+    const inp = document.getElementById(id);
+    if (!inp) continue;
+    const box = document.createElement('div');
+    box.className = 'stepper';
+    box.innerHTML = '<button type="button" class="ghost" data-d="-1">−</button>' +
+                    '<button type="button" class="ghost" data-d="1">＋</button>';
+    box.querySelectorAll('button').forEach(b => b.onclick = () => {
+      inp.value = Math.min(cfg.max, Math.max(cfg.min, Number(inp.value) + cfg.step * Number(b.dataset.d)));
+      inp.dispatchEvent(new Event('input'));
+    });
+    inp.after(box);
+  }
+}
 (async function init(){
   const d = await api('/api/settings'); S = d.settings;
   fill(); await loadStorage(); await loadPads(); await refresh();
@@ -433,6 +478,7 @@ async function refresh() {
   bind('power_effect_speed','power_effect_speed_v', v=>(v/10).toFixed(1));
   bind('store_effect_speed','store_effect_speed_v', v=>(v/10).toFixed(1));
   bind('marquee_period','marquee_period_v', v=>(v/10).toFixed(1));
+  buildSteppers();
   setInterval(refresh, 3000);
 })();
 </script>
