@@ -52,7 +52,7 @@ DEFAULT_PIN_MAP = {
     'store_green': 'GPP_S_2',     # 状态灯 绿
     'store_blue':  'GPP_S_6',     # 状态灯 蓝
     'usb':         'GPPC_A_13',   # USB 指示灯
-    'lan1':        'GPPC_F_7',    # 网口 1 指示灯
+    'lan1':        'GPP_R_7',     # 网口 1 指示灯
     'lan2':        'GPPC_B_7',    # 网口 2 指示灯
     'disk1_green': 'GPP_S_0',  'disk1_red': 'GPPC_D_19',
     'disk2_green': 'GPPC_H_4', 'disk2_red': 'GPPC_H_5',
@@ -100,7 +100,7 @@ FALLBACK_LINES = {
     'GPP_S_4': 100, 'GPP_S_5': 101, 'GPP_S_6': 102,
     'GPPC_H_4': 164, 'GPPC_H_5': 165, 'GPPC_H_7': 167,
     'GPPC_D_0': 192, 'GPPC_D_1': 193, 'GPPC_D_3': 195, 'GPPC_D_19': 211,
-    'GPPC_F_7': 295,
+    'GPPC_F_7': 295, 'GPP_R_7': 359,
 }
 
 LAN_PORT_MAP = {
@@ -1544,10 +1544,11 @@ def main():
                     store_color = scale_color(store_color, 15)
                 power_effect = store_effect = settings['night_effect']
 
-            if probing:
+            ov0 = state.active_overrides()
+            test_mode = probing or any(k.startswith('pin:') for k in ov0)
+            if test_mode:                # 校准/单脚测试：屏蔽常态灯效，只亮显式测试目标
                 power_color = store_color = (0.0, 0.0, 0.0)
                 power_effect = store_effect = 'solid'
-            ov0 = state.active_overrides()
             if 'power' in ov0:
                 power_color, power_effect = ov0['power'][0], 'solid'
             if 'store' in ov0:
@@ -1556,8 +1557,30 @@ def main():
             leds.set('store', store_rgb, store_color, store_effect, store_speed)
 
             # ---- 其他 LED ----
-            if not probing:
-                ov = state.active_overrides()
+            if test_mode:
+                leds.set_marquee(None)
+                leds.update_activity([])
+                probe_pad = None
+                if probing and probe['list'] and probe['index'] > 0:
+                    probe_pad = probe['list'][probe['index'] - 1]
+                for pad in [usb_pad, lan_pads['lan1'], lan_pads['lan2']] + \
+                           [d[c] for d in disk_pads for c in ('green', 'red')]:
+                    if pad and pad != probe_pad:
+                        gpio.set(pad, False)
+                for key, (color, _exp) in ov0.items():
+                    v = color[0] > 0.5
+                    if key.startswith('pin:'):
+                        gpio.set(key[4:], v)
+                    elif key == 'usb':
+                        gpio.set(usb_pad, v)
+                    elif key == 'lan1':
+                        gpio.set(lan_pads['lan1'], v)
+                    elif key == 'lan2':
+                        gpio.set(lan_pads['lan2'], v)
+                    elif re.fullmatch(r'disk[0-3][gr]', key):
+                        gpio.set(disk_pads[int(key[4])]['green' if key[5] == 'g' else 'red'], v)
+            else:
+                ov = ov0
                 if settings['usb_led'] or 'usb' in ov:
                     gpio.set(usb_pad, ov['usb'][0][0] > 0.5 if 'usb' in ov else usb_disk_present())
                 lan1_up, lan2_up = lan_link_states()
@@ -1595,9 +1618,12 @@ def main():
                         specs.append({'pad': disk_pads[i]['green'], 'kind': 'disk', 'key': dev,
                                       'base': slots[i][0]})
                 if settings['lan_activity'] and settings['lan_led'] and not ov:
+                    link = {1: lan1_up, 2: lan2_up}
                     for i, name in enumerate(physical_ifaces()):
-                        specs.append({'pad': lan_pads['lan1' if i == 0 else 'lan2'],
-                                      'kind': 'net', 'key': name, 'base': True})
+                        port = LAN_PORT_MAP.get(name, i + 1)
+                        specs.append({'pad': lan_pads['lan1' if port == 1 else 'lan2'],
+                                      'kind': 'net', 'key': name,
+                                      'base': link.get(port, False)})
                 leds.update_activity(specs)
 
             if state.request_fan_handback:

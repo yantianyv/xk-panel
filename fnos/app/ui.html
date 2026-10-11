@@ -244,6 +244,7 @@
         <button class="ghost" onclick="post('/api/probe_stop',{})">停止</button>
         <span class="hint">每脚 <input type="number" id="probe_seconds" step="0.5" min="0.5" max="10"
           style="width:60px;display:inline-block"> 秒</span>
+        <button class="ghost" onclick="clearHeld()">全部熄灭</button>
       </div>
       <div class="grid" id="pinmap" style="margin-top:10px"></div>
       <div class="inline" style="margin-top:10px">
@@ -346,9 +347,12 @@ function renderPinMap() {
   document.getElementById('pinmap').innerHTML = PADS.roles.map(([role, label]) => `
     <div>
       <label>${label}</label>
-      <select id="pm_${role}" onchange="PM['${role}']=this.value">${padOptions(PM[role])}</select>
-      <button class="ghost" style="margin-top:6px;width:100%"
-        onclick="post('/api/test',{target:'pin:'+PM['${role}'],color:'#ffffff',seconds:3})">测试</button>
+      <select id="pm_${role}" onchange="PM['${role}']=this.value;updateHoldButtons()">${padOptions(PM[role])}</select>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="ghost" style="flex:1" id="hold_${role}" onclick="toggleHold('${role}')">点亮</button>
+        <button class="ghost" style="flex:1"
+          onclick="post('/api/test',{target:'pin:'+PM['${role}'],color:'#ffffff',seconds:3})">闪 3 秒</button>
+      </div>
     </div>`).join('');
 }
 async function savePinMap() {
@@ -364,6 +368,32 @@ async function probe(scope) {
   const sec = Number(document.getElementById('probe_seconds').value) || 2.5;
   const r = await post('/api/probe', {scope, seconds: sec});
   if (r.ok) toast(`开始探测 ${r.count} 个灯位`);
+}
+const heldPins = new Set();
+async function toggleHold(role) {
+  const pad = PM[role];
+  if (heldPins.has(pad)) {
+    await post('/api/test', {target:'pin:'+pad, off:true, seconds:1});
+    heldPins.delete(pad);
+  } else {
+    await post('/api/test', {target:'pin:'+pad, color:'#ffffff', seconds:3600});
+    heldPins.add(pad);
+    toast(`${pad} 已点亮，看完点「熄灭」`);
+  }
+  updateHoldButtons();
+}
+function updateHoldButtons() {
+  if (!PADS.roles) return;
+  PADS.roles.forEach(([role]) => {
+    const b = document.getElementById('hold_' + role);
+    if (b) b.textContent = heldPins.has(PM[role]) ? '熄灭' : '点亮';
+  });
+}
+async function clearHeld() {
+  heldPins.clear();
+  updateHoldButtons();
+  await post('/api/probe_stop', {});
+  await post('/api/clear_test', {});
 }
 async function refresh() {
   const d = await api('/api/status');
